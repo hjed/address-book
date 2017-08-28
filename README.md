@@ -6,7 +6,7 @@ please run `npm install` to install all dependencies.
 
 # Deployment
 
-run: `gcloud --project=your-app app deploy app.yaml
+run: `gcloud --project=your-app app deploy app.yaml`
 
 # Files
 
