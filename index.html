@@ -9,12 +9,112 @@
     <!-- Not the most elegant way to use angular, type script would be better but I don't have much
         expirence in ts so it would take much longer -->
     <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.4/angular.min.js"></script>
+    <script src="/scripts/angular-file-upload.min.js"></script>
 
     <style>
         body {
             padding-top: 5rem;
         }
     </style>
+    <script>
+        // we're just going to create a single component application
+        // mainly I want to use angulars ng-repeat and a few similar things
+        var app = angular.module("address-book", ['angularFileUpload', ])
+
+        app.controller("address-list", function ($scope, $http, $document) {
+            // load the list of addresses
+            function reload() {
+                $http({
+                    "method": "GET",
+                    "url": "/address"
+                }).then(function onSuccess(response) {
+                    console.log(response);
+                    $scope.addresses = response.data.entries;
+                    $scope.has_pages = response.data.is_more;
+                }, function onFailure(response) {
+                    alert("Failed to load data!");
+                })
+            }
+
+            $scope.reloadAddresses = reload;
+
+            // error handling
+            $scope.errors = [];
+            $scope.error = "";
+            $scope.getNextError = function () {
+                if ($scope.errors.length > 0) {
+                    $scope.error = $scope.errors.pop();
+                    var wait = confirm($scope.error);
+                    $scope.getNextError();
+                }
+
+            }
+
+
+            reload();
+
+        });
+
+
+        app.controller("address-upload", function ($scope, $http, FileUploader) {
+            $scope.uploader = new FileUploader();
+            $scope.uploader.url = "/address";
+            $scope.uploader.onAfterAddingFile = function (item) {
+                console.log(item);
+                item.upload();
+            };
+            $scope.successShow = false;
+            $scope.successMessage = "";
+            $scope.conflicts = []
+
+            $scope.uploader.onCompleteItem = function (item, response, status, headers) {
+                console.log(response);
+                item.remove();
+
+                if (status != 200) {
+                    response["errors"].forEach(function (error) {
+                        $scope.errors.push(error);
+                    });
+                    $scope.getNextError();
+                } else if(response["conflict_entries"].length > 0) {
+                    $scope.conflicts = response["conflict_entries"];
+                } else {
+                    console.log("success!");
+                    $scope.successShow = true;
+                    $scope.successMessage = "File Uploaded Succesfully!";
+                    $scope.$digest();
+                }
+
+
+
+                $scope.reloadAddresses();
+            };
+
+            $scope.resolve = function (conflict) {
+                var newDict = {
+                    id: conflict["id"],
+                    email: conflict["email"],
+
+                }
+                // we only need to update it if its the new value, old values are already saved
+                if (conflict["new_value"] == "new") {
+                    newDict["name"] = conflict["requested_name"];
+                    $http.post("/address/"+ conflict["id"], newDict).then(function onSuccess(response) {
+                        console.log(response);
+                        $scope.reloadAddresses();
+                    }, function onFailure(response) {
+                        alert("Failed to update!");
+                    })
+                }
+                var listCopy = new Set($scope.conflicts);
+                listCopy.delete(conflict);
+                $scope.conflicts = Array.from(listCopy);
+                $scope.reloadAddresses();
+            }
+        });
+
+
+    </script>
 
 </head>
 <body ng-app="address-book">
@@ -25,7 +125,7 @@
 </nav>
 
 <!-- Main Body -->
-<div class="container"  ng-controller="address-list">
+<div class="container"  ng-controller="address-list" id="address-main">
 
     <div class="row">
         <div class="col-sm-5">Name</div>
@@ -37,30 +137,37 @@
         <div class="col-sm-5">{{address.email}}</div>
     </div>
 
-    <div class="row", ng-show="has_pages">
-        TODO: next buttons
+
+    <div class="row" >
+        <div class="col-sm-10" ng-controller="address-upload">
+            <div class="alert alert-success" role="alert" ng-show="successShow">
+                {{successMessage}}
+            </div>
+            <div class="alert alert-danger" role="alert" ng-repeat="conflict in conflicts">
+                The entry for {{conflict.email}} has two entries, which do you prefer?<br/>
+                <form>
+                    <div class="form-check form-check-inline">
+                        <label class="form-check-label">
+                            <input class="form-check-input" type="radio" name="inlineRadioOptions"
+                                   id="inlineRadio1" ng-model="conflict.new_value" value="new"> {{conflict.requested_name}}
+                        </label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <label class="form-check-label">
+                            <input class="form-check-input" type="radio" name="inlineRadioOptions"
+                                   id="inlineRadio2" ng-model="conflict.new_value" value="old"> {{conflict["name"]}}
+                        </label>
+                    </div>
+                    <button class="btn btn-primary" type="button" ng-click="resolve(conflict)">Resolve</button>
+                </form>
+            </div>
+            Upload New Contacts with a CSV (email, name)
+            <input type="file" nv-file-select uploader="uploader" />
+        </div>
+
     </div>
 
 </div>
 
-<script>
-    // we're just going to create a single component application
-    // mainly I want to use angulars ng-repeat and a few similar things
-    var app = angular.module("address-book", [])
-
-    app.controller("address-list", function ($scope, $http) {
-        // load the list of addresses
-        $http({
-            "method" : "GET",
-            "url" : "/address"
-        }).then(function onSuccess(response) {
-            console.log(response);
-            $scope.addresses = response.data.entries;
-            $scope.has_pages = response.data.is_more;
-        }, function onFailure(response) {
-            alert("Failed to load data!");
-        })
-    });
-</script>
 </body>
 </html>

@@ -1,3 +1,4 @@
+import csv
 import json
 import logging
 
@@ -6,7 +7,7 @@ from google.appengine.ext import ndb
 
 from address_data import AddressEntry
 
-DEFAULT_PAGE_LIMIT = 50
+DEFAULT_PAGE_LIMIT = 500
 
 
 class SimpleRestAddressHandler(webapp2.RequestHandler):
@@ -60,8 +61,39 @@ class SimpleResetAddressesHandler(webapp2.RequestHandler):
 
     def post(self):
         """
-        Adds to the list of addresses
+        Adds to the list of addresses. Accepts a csv in the format email, name
         """
+        outdict = {"entries":[], "conflict_entries":[]}
+
+        if not "file" in self.request.POST:
+            self.error(400)
+            outdict = {"errors" : ["Your file seems to be malformed, please make sure it is a csv file formated: name, address"]}
+        else:
+            file = self.request.POST.get("file")
+            csv.register_dialect("strict_csv", delimiter=",", quotechar='"', quoting = csv.QUOTE_MINIMAL, strict=True)
+            reader = csv.reader(file.file, dialect="strict_csv")
+
+            row_num = 0
+            try:
+                for row in reader:
+                    row_num+=1
+                    # check we have the right number of fields
+                    if len(row) != 2:
+                        self.error(400)
+                        outdict["errors"] = ["row %d does not have two colls!" % row_num]
+                        break
+                    success, output = AddressEntry.check_and_add(row[0], row[1])
+                    if success:
+                        outdict["entries"].append(output)
+                    else:
+                        outdict["conflict_entries"].append(output)
+            except csv.Error as ex:
+                outdict["errors"] = ["It appears your file is malformed: %s" % ex.message]
+                self.error(400)
+        self.response.write(json.dumps(outdict))
+
+
+
         pass
 
     def put(self):

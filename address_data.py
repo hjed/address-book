@@ -105,3 +105,29 @@ class AddressEntry(ndb.Model):
         return True, model
 
 
+    @staticmethod
+    @ndb.transactional(xg=True)
+    def check_and_add(email, name):
+        """
+        Checks an entry, adds it to the db if there are no matches. Otherwise returns error handling json
+        :param email: the email to add
+        :param name: the name
+        :return: success, json
+        """
+
+        key = ndb.Key(AddressEntry, email)
+        model = key.get()
+        # we only have a problem if a model for the given email exists AND the name is different
+        if not model is None:
+            if model.name != name:
+                jdict = model.to_json_dict()
+                jdict["requested_name"] = name
+                return False, jdict
+
+        model = AddressEntry(
+            id=email,
+            email=email,
+            name=name
+        )
+        model.put()
+        return True, model.to_json_dict()

@@ -1,0 +1,7 @@
+{
+  "name": "address-book",
+  "version": "0.0.1",
+  "dependencies": {
+    "angular-file-upload": "^2.5.0"
+  }
+}
